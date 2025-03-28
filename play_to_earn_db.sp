@@ -14,7 +14,7 @@ public Plugin myinfo =
 
 Database    walletsDB;
 
-static char onlinePlayers[MAXPLAYERS][256];
+static char onlinePlayers[MAXPLAYERS][512];
 static int  onlinePlayersCount           = 0;
 
 int         currentTimestamp             = 0;
@@ -515,6 +515,52 @@ public void OnMapEnd()
 {
     PrintToServer("[PTE] Map ended");
     ClearTemporaryData();
+
+    if (walletsDB != null)
+    {
+        walletsDB.Close();
+        walletsDB = null;
+    }
+}
+
+public void OnMapStart()
+{
+    if (walletsDB == null)
+    {
+        char walletDBError[32];
+        walletsDB = SQL_Connect("default", true, walletDBError, sizeof(walletDBError));
+        if (walletsDB == null)
+        {
+            PrintToServer("[PTE] ERROR Connecting to the database: %s", walletDBError);
+            PrintToServer("[PTE] The plugin will stop now...");
+            return;
+        }
+    }
+}
+
+public void OnServerEnterHibernation()
+{
+    cleanupOnlinePlayers();
+    if (walletsDB != null)
+    {
+        walletsDB.Close();
+        walletsDB = null;
+    }
+}
+
+public void OnServerExitHibernation()
+{
+    if (walletsDB == null)
+    {
+        char walletDBError[32];
+        walletsDB = SQL_Connect("default", true, walletDBError, sizeof(walletDBError));
+        if (walletsDB == null)
+        {
+            PrintToServer("[PTE] ERROR Connecting to the database: %s", walletDBError);
+            PrintToServer("[PTE] The plugin will stop now...");
+            return;
+        }
+    }
 }
 
 public void OnRoundStart(Event event, const char[] name, bool dontBroadcast)
@@ -879,6 +925,15 @@ void updateOnlinePlayerByUserId(int userId, JSON_Object updatedPlayerObj)
             }
         }
     }
+}
+
+void cleanupOnlinePlayers()
+{
+    for (int i = 0; i < MAXPLAYERS; i++)
+    {
+        strcopy(onlinePlayers[i], 256, "");
+    }
+    onlinePlayersCount = 0;
 }
 //
 //
