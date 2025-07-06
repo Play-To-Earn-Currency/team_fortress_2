@@ -63,7 +63,11 @@ char            dbStatementError[524];
 
 public void OnPluginStart()
 {
-    regex = CompileRegex("^[a-zA-Z0-9]{42}$");
+    regex = CompileRegex("^0x[a-fA-F0-9]{40}$");
+    if (regex == INVALID_HANDLE)
+    {
+        LogError("Failed to compile wallet regex.");
+    }
 
     PrintToServer("[PTE] Play to Earn plugin has been initialized");
     CreateTimer(1.0, TimestampUpdate, _, TIMER_REPEAT);
