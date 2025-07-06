@@ -12,54 +12,54 @@ public Plugin myinfo =
     url         = "https://github.com/Play-To-Earn-Currency/team_fortress_2"
 };
 
-static Database    walletsDB;
+static Database walletsDB;
 
-static char onlinePlayers[MAXPLAYERS][512];
-static int  onlinePlayersCount           = 0;
+static char     onlinePlayers[MAXPLAYERS][512];
+static int      onlinePlayersCount           = 0;
 
-int         currentTimestamp             = 0;
-int         timestampIncomes[15]         = { 60, 120, 180, 240, 300, 360, 420, 480, 540, 600, 660, 720, 780, 840, 900 };
-const int   timestampIncomesSize         = 15;
-char        timestampValue[15][20]       = { "100000000000000000", "150000000000000000", "200000000000000000",
+int             currentTimestamp             = 0;
+int             timestampIncomes[15]         = { 60, 120, 180, 240, 300, 360, 420, 480, 540, 600, 660, 720, 780, 840, 900 };
+const int       timestampIncomesSize         = 15;
+char            timestampValue[15][20]       = { "100000000000000000", "150000000000000000", "200000000000000000",
                                 "250000000000000000", "300000000000000000", "350000000000000000",
                                 "400000000000000000", "450000000000000000", "500000000000000000",
                                 "550000000000000000", "600000000000000000", "650000000000000000",
                                 "700000000000000000", "750000000000000000", "800000000000000000" };
-char        timestampValueToShow[15][10] = { "0.1", "0.15", "0.2",
+char            timestampValueToShow[15][10] = { "0.1", "0.15", "0.2",
                                       "0.25", "0.3", "0.35",
                                       "0.4", "0.45", "0.5",
                                       "0.55", "0.6", "0.65",
                                       "0.7", "0.75", "0.8" };
 
-char        winnerValue[20]              = "500000000000000000";
-char        loserValue[20]               = "300000000000000000";
-char        winnerToShow[10]             = "0.5";
-char        loserToShow[10]              = "0.3";
+char            winnerValue[20]              = "500000000000000000";
+char            loserValue[20]               = "300000000000000000";
+char            winnerToShow[10]             = "0.5";
+char            loserToShow[10]              = "0.3";
 
-bool        alertPlayerIncomings         = true;
+bool            alertPlayerIncomings         = true;
 
-const int   minimumTimePlayedForIncoming = 60;
-const int   minimumPlayerForSoloMVP      = 16;
-const int   minimumPlayerForTwoMVP       = 8;
-const int   minimumPlayerForThreeMVP     = 4;
+const int       minimumTimePlayedForIncoming = 60;
+const int       minimumPlayerForSoloMVP      = 16;
+const int       minimumPlayerForTwoMVP       = 8;
+const int       minimumPlayerForThreeMVP     = 4;
 
-char        soloMVPValue[20]             = "50000000000000000";
-char        twoMVPValue[20]              = "30000000000000000";
-char        threeMVPValue[20]            = "10000000000000000";
-char        soloMVPValueShow[10]         = "0.5";
-char        twoMVPValueShow[10]          = "0.3";
-char        threeMVPValueShow[10]        = "0.1";
-const int   minimumScoreToReceiveMVP     = 5;
+char            soloMVPValue[20]             = "50000000000000000";
+char            twoMVPValue[20]              = "30000000000000000";
+char            threeMVPValue[20]            = "10000000000000000";
+char            soloMVPValueShow[10]         = "0.5";
+char            twoMVPValueShow[10]          = "0.3";
+char            threeMVPValueShow[10]        = "0.1";
+const int       minimumScoreToReceiveMVP     = 5;
 
-Regex       regex;
+Regex           regex;
 
-DBStatement statement_GetWalletRegistered;
-DBStatement statement_GetPlayerRegistered;
-DBStatement statement_RegisterPlayer;
-DBStatement statement_IncrementWallet;
-DBStatement statement_RegisterWallet_Exists;
-DBStatement statement_RegisterWallet;
-char        dbStatementError[524];
+DBStatement     statement_GetWalletRegistered;
+DBStatement     statement_GetPlayerRegistered;
+DBStatement     statement_RegisterPlayer;
+DBStatement     statement_IncrementWallet;
+DBStatement     statement_RegisterWallet_Exists;
+DBStatement     statement_RegisterWallet;
+char            dbStatementError[524];
 
 public void OnPluginStart()
 {
@@ -467,7 +467,7 @@ public void OnPlayerChangeTeam(Event event, const char[] name, bool dontBroadcas
     JSON_Object playerObj = getPlayerByUserId(userId);
     if (playerObj == null)
     {
-        PrintToServer("[PTE] [OnPlayerChangeTeam] ERROR: %s have any invalid player object", userId);
+        PrintToServer("[PTE] [OnPlayerChangeTeam] Warning: %d have any invalid player object, a bot?", userId);
         return;
     }
 
@@ -520,6 +520,8 @@ public void OnMapEnd()
     {
         walletsDB.Close();
         walletsDB = null;
+
+        PrintToServer("[PTE] Map ended, database closed");
     }
 }
 
@@ -529,11 +531,13 @@ public void OnMapStart()
     {
         char walletDBError[32];
         walletsDB = SQL_Connect("default", true, walletDBError, sizeof(walletDBError));
-        if (walletsDB == null)
+        if (walletDBError[0] != '\0')
         {
             PrintToServer("[PTE] ERROR Connecting to the database: %s", walletDBError);
-            PrintToServer("[PTE] The plugin will stop now...");
             return;
+        }
+        else {
+            PrintToServer("[PTE] Map started, database re-connection successfully");
         }
     }
 }
@@ -545,6 +549,7 @@ public void OnServerEnterHibernation()
     {
         walletsDB.Close();
         walletsDB = null;
+        PrintToServer("[PTE] Server hibernating, database closed");
     }
 }
 
@@ -552,14 +557,20 @@ public void OnServerExitHibernation()
 {
     if (walletsDB == null)
     {
-        char walletDBError[32];
+        char walletDBError[256];
         walletsDB = SQL_Connect("default", true, walletDBError, sizeof(walletDBError));
-        if (walletsDB == null)
+
+        if (walletDBError[0] != '\0')
         {
             PrintToServer("[PTE] ERROR Connecting to the database: %s", walletDBError);
-            PrintToServer("[PTE] The plugin will stop now...");
             return;
         }
+        else {
+            PrintToServer("[PTE] Exited from hibernation, database re-connection successfully");
+        }
+    }
+    else {
+        PrintToServer("[PTE] ???? Server exit from hibernation but the database is not null");
     }
 }
 
@@ -738,7 +749,7 @@ stock bool WalletRegistered(const int steamId)
     {
         char error[128];
         SQL_GetError(walletsDB, error, sizeof(error));
-        PrintToServer("[PTE] Error checking if %d exists: %s", steamId, error);
+        PrintToServer("[PTE] [WalletRegistered] Error checking if %d exists: %s", steamId, error);
         return false;
     }
     else {
@@ -770,7 +781,7 @@ bool PlayerRegistered(const int steamId)
     {
         char error[128];
         SQL_GetError(walletsDB, error, sizeof(error));
-        PrintToServer("[PTE] Error checking if %d exists: %s", steamId, error);
+        PrintToServer("[PTE] [PlayerRegistered] Error checking if %d exists: %s", steamId, error);
         return false;
     }
     else {
