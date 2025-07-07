@@ -529,8 +529,12 @@ public void OnMapEnd()
     }
 }
 
+static bool isHibernating = false;
+
 public void OnMapStart()
 {
+    if (isHibernating) return;
+
     if (walletsDB == null)
     {
         char walletDBError[32];
@@ -548,6 +552,7 @@ public void OnMapStart()
 
 public void OnServerEnterHibernation()
 {
+    isHibernating = true;
     cleanupOnlinePlayers();
     if (walletsDB != null)
     {
@@ -559,6 +564,7 @@ public void OnServerEnterHibernation()
 
 public void OnServerExitHibernation()
 {
+    isHibernating = false;
     if (walletsDB == null)
     {
         char walletDBError[256];
