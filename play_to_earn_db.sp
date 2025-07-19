@@ -2,6 +2,7 @@
 #include <json>
 #include <tf2_stocks.inc>
 #include <regex.inc>
+#include <SteamWorks>
 
 public Plugin myinfo =
 {
@@ -12,54 +13,44 @@ public Plugin myinfo =
     url         = "https://github.com/Play-To-Earn-Currency/team_fortress_2"
 };
 
-static Database walletsDB;
+static char httpServerIp[32] = "http://localhost:8000";
+static char httpFrom[12]     = "tf2";
+static char onlinePlayers[MAXPLAYERS][512];
+static int  onlinePlayersCount           = 0;
 
-static char     onlinePlayers[MAXPLAYERS][512];
-static int      onlinePlayersCount           = 0;
-
-int             currentTimestamp             = 0;
-int             timestampIncomes[15]         = { 60, 120, 180, 240, 300, 360, 420, 480, 540, 600, 660, 720, 780, 840, 900 };
-const int       timestampIncomesSize         = 15;
-char            timestampValue[15][20]       = { "100000000000000000", "150000000000000000", "200000000000000000",
+int         currentTimestamp             = 0;
+int         timestampIncomes[15]         = { 60, 120, 180, 240, 300, 360, 420, 480, 540, 600, 660, 720, 780, 840, 900 };
+const int   timestampIncomesSize         = 15;
+char        timestampValue[15][20]       = { "100000000000000000", "150000000000000000", "200000000000000000",
                                 "250000000000000000", "300000000000000000", "350000000000000000",
                                 "400000000000000000", "450000000000000000", "500000000000000000",
                                 "550000000000000000", "600000000000000000", "650000000000000000",
                                 "700000000000000000", "750000000000000000", "800000000000000000" };
-char            timestampValueToShow[15][10] = { "0.1", "0.15", "0.2",
+char        timestampValueToShow[15][10] = { "0.1", "0.15", "0.2",
                                       "0.25", "0.3", "0.35",
                                       "0.4", "0.45", "0.5",
                                       "0.55", "0.6", "0.65",
                                       "0.7", "0.75", "0.8" };
 
-char            winnerValue[20]              = "500000000000000000";
-char            loserValue[20]               = "300000000000000000";
-char            winnerToShow[10]             = "0.5";
-char            loserToShow[10]              = "0.3";
+char        winnerValue[20]              = "500000000000000000";
+char        loserValue[20]               = "300000000000000000";
+char        winnerToShow[10]             = "0.5";
+char        loserToShow[10]              = "0.3";
 
-bool            alertPlayerIncomings         = true;
+const int   minimumTimePlayedForIncoming = 60;
+const int   minimumPlayerForSoloMVP      = 16;
+const int   minimumPlayerForTwoMVP       = 8;
+const int   minimumPlayerForThreeMVP     = 4;
 
-const int       minimumTimePlayedForIncoming = 60;
-const int       minimumPlayerForSoloMVP      = 16;
-const int       minimumPlayerForTwoMVP       = 8;
-const int       minimumPlayerForThreeMVP     = 4;
+char        soloMVPValue[20]             = "50000000000000000";
+char        twoMVPValue[20]              = "30000000000000000";
+char        threeMVPValue[20]            = "10000000000000000";
+char        soloMVPValueShow[10]         = "0.5";
+char        twoMVPValueShow[10]          = "0.3";
+char        threeMVPValueShow[10]        = "0.1";
+const int   minimumScoreToReceiveMVP     = 5;
 
-char            soloMVPValue[20]             = "50000000000000000";
-char            twoMVPValue[20]              = "30000000000000000";
-char            threeMVPValue[20]            = "10000000000000000";
-char            soloMVPValueShow[10]         = "0.5";
-char            twoMVPValueShow[10]          = "0.3";
-char            threeMVPValueShow[10]        = "0.1";
-const int       minimumScoreToReceiveMVP     = 5;
-
-Regex           regex;
-
-DBStatement     statement_GetWalletRegistered;
-DBStatement     statement_GetPlayerRegistered;
-DBStatement     statement_RegisterPlayer;
-DBStatement     statement_IncrementWallet;
-DBStatement     statement_RegisterWallet_Exists;
-DBStatement     statement_RegisterWallet;
-char            dbStatementError[524];
+Regex       regex;
 
 public void OnPluginStart()
 {
@@ -69,24 +60,7 @@ public void OnPluginStart()
         LogError("Failed to compile wallet regex.");
     }
 
-    PrintToServer("[PTE] Play to Earn plugin has been initialized");
     CreateTimer(1.0, TimestampUpdate, _, TIMER_REPEAT);
-
-    char walletDBError[32];
-    walletsDB = SQL_Connect("default", true, walletDBError, sizeof(walletDBError));
-    if (walletsDB == null)
-    {
-        PrintToServer("[PTE] ERROR Connecting to the database: %s", walletDBError);
-        PrintToServer("[PTE] The plugin will stop now...");
-        return;
-    }
-
-    statement_GetWalletRegistered   = SQL_PrepareQuery(walletsDB, "SELECT walletaddress FROM tf2 WHERE uniqueid = ?;", dbStatementError, sizeof(dbStatementError));
-    statement_GetPlayerRegistered   = SQL_PrepareQuery(walletsDB, "SELECT COUNT(*) FROM tf2 WHERE uniqueid = ?;", dbStatementError, sizeof(dbStatementError));
-    statement_RegisterPlayer        = SQL_PrepareQuery(walletsDB, "INSERT INTO tf2 (uniqueid) VALUES (?);", dbStatementError, sizeof(dbStatementError));
-    statement_IncrementWallet       = SQL_PrepareQuery(walletsDB, "UPDATE tf2 SET value = value + ? WHERE uniqueid = ?;", dbStatementError, sizeof(dbStatementError));
-    statement_RegisterWallet_Exists = SQL_PrepareQuery(walletsDB, "UPDATE tf2 SET walletaddress = ? WHERE uniqueid = ?;", dbStatementError, sizeof(dbStatementError));
-    statement_RegisterWallet        = SQL_PrepareQuery(walletsDB, "INSERT INTO tf2 (uniqueid, walletaddress) VALUES (?, ?);", dbStatementError, sizeof(dbStatementError));
 
     // Match Finish Event
     HookEvent("teamplay_win_panel", OnRoundEnd, EventHookMode_PostNoCopy);
@@ -105,6 +79,11 @@ public void OnPluginStart()
 
     // Round started
     HookEventEx("teamplay_round_start", OnRoundStart, EventHookMode_Post);
+
+    // ID command
+    RegConsoleCmd("id", CommandViewSteamId, "View your steam id");
+
+    PrintToServer("[PTE] Play to Earn plugin has been initialized");
 }
 
 //
@@ -433,6 +412,8 @@ public void OnPlayerConnect(Event event, const char[] name, bool dontBroadcast)
                       playerName, userId, index, networkId, address, isBot);
 
         PrintToServer("[PTE] Online Players: %d", onlinePlayersCount);
+
+        RegisterPlayer(StringToInt(networkId));
     }
 }
 
@@ -456,6 +437,11 @@ public void OnPlayerDisconnect(Event event, const char[] name, bool dontBroadcas
                       playerName, userId, networkId, reason, isBot);
 
         PrintToServer("[PTE] Online Players: %d", onlinePlayersCount);
+
+        if (onlinePlayersCount <= 0)
+        {
+            cleanupOnlinePlayers();
+        }
     }
 }
 
@@ -483,32 +469,19 @@ public void OnPlayerChangeTeam(Event event, const char[] name, bool dontBroadcas
     playerObj.SetInt("team", team);
     playerObj.SetInt("teamTimestamp", currentTimestamp);
 
-    int client  = GetClientOfUserId(userId);
-    int steamId = GetSteamAccountID(client);
+    int client = GetClientOfUserId(userId);
 
     // Check if player is already playing
-    if (oldTeam == 0)
+    if (oldTeam != 0)
     {
-        if (!PlayerRegistered(steamId))
-        {
-            RegisterPlayer(steamId);
-        }
-    }
-    else {
         PrintToChat(client, "[PTE] Playtime reseted because you changed the team");
     }
-
-    // Check wallet status
-    if (playerObj.GetInt("walletStatus") == -1)
-    {
-        if (WalletRegistered(steamId))
+    // First map join
+    else {
+        int steamId = GetSteamAccountID(client, true);
+        if (steamId != 0)
         {
-            playerObj.SetInt("walletStatus", 1);
-            updateOnlinePlayerByUserId(userId, playerObj);
-        }
-        else {
-            playerObj.SetInt("walletStatus", 0);
-            updateOnlinePlayerByUserId(userId, playerObj);
+            RegisterPlayer(steamId);
         }
     }
 
@@ -519,69 +492,12 @@ public void OnMapEnd()
 {
     PrintToServer("[PTE] Map ended");
     ClearTemporaryData();
-
-    if (walletsDB != null)
-    {
-        walletsDB.Close();
-        walletsDB = null;
-
-        PrintToServer("[PTE] Map ended, database closed");
-    }
-}
-
-static bool isHibernating = false;
-
-public void OnMapStart()
-{
-    if (isHibernating) return;
-
-    if (walletsDB == null)
-    {
-        char walletDBError[32];
-        walletsDB = SQL_Connect("default", true, walletDBError, sizeof(walletDBError));
-        if (walletDBError[0] != '\0')
-        {
-            PrintToServer("[PTE] ERROR Connecting to the database: %s", walletDBError);
-            return;
-        }
-        else {
-            PrintToServer("[PTE] Map started, database re-connection successfully");
-        }
-    }
 }
 
 public void OnServerEnterHibernation()
 {
-    isHibernating = true;
     cleanupOnlinePlayers();
-    if (walletsDB != null)
-    {
-        walletsDB.Close();
-        walletsDB = null;
-        PrintToServer("[PTE] Server hibernating, database closed");
-    }
-}
-
-public void OnServerExitHibernation()
-{
-    isHibernating = false;
-    if (walletsDB == null)
-    {
-        char walletDBError[256];
-        walletsDB = SQL_Connect("default", true, walletDBError, sizeof(walletDBError));
-
-        if (walletDBError[0] != '\0')
-        {
-            PrintToServer("[PTE] ERROR Connecting to the database: %s", walletDBError);
-            return;
-        }
-        else {
-            PrintToServer("[PTE] Exited from hibernation, database re-connection successfully");
-        }
-    }
-    else {
-        PrintToServer("[PTE] ???? Server exit from hibernation but the database is not null");
-    }
+    ClearTemporaryData();
 }
 
 public void OnRoundStart(Event event, const char[] name, bool dontBroadcast)
@@ -598,8 +514,6 @@ public void OnRoundStart(Event event, const char[] name, bool dontBroadcast)
 //
 public Action CommandRegisterWallet(int client, int args)
 {
-    Format(dbStatementError, sizeof(dbStatementError), "");
-
     if (!IsClientConnected(client) || IsFakeClient(client))
     {
         return Plugin_Handled;
@@ -623,50 +537,32 @@ public Action CommandRegisterWallet(int client, int args)
             return Plugin_Handled;
         }
 
-        int steamId = GetSteamAccountID(client);
+        int  steamId = GetSteamAccountID(client);
 
-        if (PlayerRegistered(steamId))
+        char url[256];
+        Format(url, sizeof(url), "%s/updatewallet", httpServerIp);
+        Handle requestHandle = SteamWorks_CreateHTTPRequest(k_EHTTPMethodPUT, url);
+
+        if (requestHandle == INVALID_HANDLE)
         {
-            SQL_BindParamString(statement_RegisterWallet_Exists, 0, walletAddress, false);
-            SQL_BindParamInt(statement_RegisterWallet_Exists, 1, steamId);
-
-            if (!SQL_Execute(statement_RegisterWallet_Exists))
-            {
-                PrintToServer("[PTE] Update %d wallet to: %s", steamId, walletAddress);
-                PrintToServer(dbStatementError);
-            }
-            else {
-                if (SQL_GetAffectedRows(statement_RegisterWallet_Exists) == 0)
-                {
-                    PrintToServer("[PTE] ERROR No rows affected while updating player %d wallet", steamId);
-                }
-            }
+            PrintToServer("[PTE] Error while creating the http request.");
+            return Plugin_Handled;
         }
-        else {
-            SQL_BindParamString(statement_RegisterWallet, 0, walletAddress, false);
-            SQL_BindParamInt(statement_RegisterWallet, 1, steamId);
 
-            if (!SQL_Execute(statement_RegisterWallet))
-            {
-                PrintToServer("[PTE] Update %d wallet to: %s", steamId, walletAddress);
-                PrintToServer(dbStatementError);
+        SteamWorks_SetHTTPRequestContextValue(requestHandle, client);
+        SteamWorks_SetHTTPCallbacks(requestHandle, OnCommandRegisterWalletRequest);
 
-                PrintToChat(client, "Cannot update your wallet, please contact server administrator!");
-            }
-            else {
-                if (SQL_GetAffectedRows(statement_RegisterWallet) == 0)
-                {
-                    PrintToServer("[PTE] ERROR No rows affected while adding player %d wallet", steamId);
+        JSON_Object body = new JSON_Object();
+        body.SetString("walletaddress", walletAddress);
+        body.SetInt("uniqueid", steamId);
+        char bodyStr[256];
+        body.Encode(bodyStr, sizeof(bodyStr));
 
-                    PrintToChat(client, "Cannot update your wallet, please contact server administrator!");
-                }
-                else {
-                    PrintToServer("[PTE] Updated %d wallet to: %s", steamId, walletAddress);
+        SteamWorks_SetHTTPRequestHeaderValue(requestHandle, "Content-Type", "application/json");
+        SteamWorks_SetHTTPRequestHeaderValue(requestHandle, "from", httpFrom);
+        SteamWorks_SetHTTPRequestRawPostBody(requestHandle, "application/json", bodyStr, strlen(bodyStr));
 
-                    PrintToChat(client, "Wallet updated!");
-                }
-            }
-        }
+        SteamWorks_SendHTTPRequest(requestHandle);
 
         json_cleanup_and_delete(playerObj);
     }
@@ -677,6 +573,28 @@ public Action CommandRegisterWallet(int client, int args)
     return Plugin_Handled;
 }
 
+public OnCommandRegisterWalletRequest(Handle hRequest, bool bFailure, bool bRequestSuccessful, EHTTPStatusCode eStatusCode, any data1, any data2)
+{
+    int client = data1;
+
+    if (eStatusCode != k_EHTTPStatusCode200OK)
+    {
+        PrintToChat(client, "[PTE] Cannot register your address, contact server owner on: discord.gg/vGHxVsXc4Q");
+    }
+    else {
+        PrintToChat(client, "[PTE] Wallet changed!");
+    }
+}
+
+public Action CommandViewSteamId(int client, int args)
+{
+    if (IsClientConnected(client) && !IsFakeClient(client))
+    {
+        PrintToChat(client, "[PTE] Your steam id is: %d", GetSteamAccountID(client));
+    }
+
+    return Plugin_Handled;
+}
 //
 //
 //
@@ -690,37 +608,104 @@ public Action TimestampUpdate(Handle timer)
     return Plugin_Continue;
 }
 
+char incrementWalletRequestBodies[MAXPLAYERS][256];
 void IncrementWallet(
     int client,
     char[] valueToIncrement,
     char[] valueToShow = "0 PTE",
     char[] reason      = ", for Playing")
 {
-    Format(dbStatementError, sizeof(dbStatementError), "");
-
     int steamId = GetSteamAccountID(client);
 
-    SQL_BindParamString(statement_IncrementWallet, 0, valueToIncrement, false);
-    SQL_BindParamInt(statement_IncrementWallet, 1, steamId);
-
-    if (!SQL_Execute(statement_IncrementWallet))
+    if (steamId == 0)
     {
-        PrintToServer("[PTE] Cannot increment %d values", steamId);
-        PrintToServer(dbStatementError);
+        PrintToServer("[PTE] Invalid client when incrementing wallet");
+        return;
     }
-    else {
-        if (SQL_GetAffectedRows(statement_IncrementWallet) > 0)
-        {
-            if (alertPlayerIncomings)
-            {
-                PrintToChat(client, "[PTE] You received: %s%s", valueToShow, reason);
-            }
-            PrintToServer("[PTE] Incremented %d value: %s, reason: '%s'", steamId, valueToIncrement, reason);
-        }
-        else {
-            PrintToServer("[PTE] ERROR No rows affected while incrementing player %d", steamId);
-        }
+
+    char url[256];
+    Format(url, sizeof(url), "%s/increment", httpServerIp);
+    Handle requestHandle = SteamWorks_CreateHTTPRequest(k_EHTTPMethodPUT, url);
+
+    if (requestHandle == INVALID_HANDLE)
+    {
+        PrintToServer("[PTE] Error while creating the http request.");
+        return;
     }
+
+    SteamWorks_SetHTTPCallbacks(requestHandle, OnIncrementRequest);
+
+    JSON_Object body = new JSON_Object();
+    body.SetString("quantity", valueToIncrement);
+    body.SetString("valueToShow", valueToShow);
+    body.SetString("reason", reason);
+    body.SetInt("uniqueid", steamId);
+    char bodyStr[256];
+    body.Encode(bodyStr, sizeof(bodyStr));
+
+    SteamWorks_SetHTTPRequestHeaderValue(requestHandle, "Content-Type", "application/json");
+    SteamWorks_SetHTTPRequestHeaderValue(requestHandle, "from", httpFrom);
+    SteamWorks_SetHTTPRequestRawPostBody(requestHandle, "application/json", bodyStr, strlen(bodyStr));
+    SteamWorks_SetHTTPRequestContextValue(requestHandle, client);
+
+    IncrementWalletStartRequestWaitTimer(requestHandle, client, bodyStr);
+}
+
+void IncrementWalletStartRequestWaitTimer(Handle requestHandle, int client, const char[] bodyStr)
+{
+    DataPack pack = new DataPack();
+    pack.WriteCell(client);
+    pack.WriteCell(requestHandle);
+    pack.WriteString(bodyStr);
+
+    CreateTimer(0.5, IncrementWalletWaitForEmptyQueue, pack, TIMER_REPEAT);
+}
+
+public Action IncrementWalletWaitForEmptyQueue(Handle timer, DataPack pack)
+{
+    pack.Reset();
+
+    int    client        = pack.ReadCell();
+    Handle requestHandle = pack.ReadCell();
+    char   bodyStr[256];
+    pack.ReadString(bodyStr, sizeof(bodyStr));
+
+    if (incrementWalletRequestBodies[client][0] == EOS)
+    {
+        delete pack;
+        strcopy(incrementWalletRequestBodies[client], sizeof(incrementWalletRequestBodies[]), bodyStr);
+        SteamWorks_SendHTTPRequest(requestHandle);
+        return Plugin_Stop;
+    }
+    return Plugin_Continue;
+}
+
+public OnIncrementRequest(Handle hRequest, bool bFailure, bool bRequestSuccessful, EHTTPStatusCode eStatusCode, any data1, any data2)
+{
+    int         client                      = data1;
+
+    JSON_Object bodySended                  = json_decode(incrementWalletRequestBodies[client]);
+    incrementWalletRequestBodies[client][0] = EOS;
+
+    if (eStatusCode != k_EHTTPStatusCode200OK)
+    {
+        PrintToChat(client, "[PTE] Cannot increment your wallet, contact server owner on: discord.gg/vGHxVsXc4Q");
+        return;
+    }
+
+    if (bodySended == null)
+    {
+        PrintToChat(client, "[PTE] Cannot increment your wallet, contact server owner on: discord.gg/vGHxVsXc4Q");
+        PrintToServer("[PTE] [Increment] ERROR: %d (bodySended index) have any invalid bodySended object: %s", client, incrementWalletRequestBodies[client]);
+        return;
+    }
+
+    char valueToShow[32];
+    bodySended.GetString("valueToShow", valueToShow, sizeof(valueToShow));
+    char reason[32];
+    bodySended.GetString("reason", reason, sizeof(reason));
+
+    PrintToChat(client, "[PTE] You received: %s%s", valueToShow, reason);
 }
 
 void ClearTemporaryData()
@@ -750,97 +735,34 @@ bool ValidAddress(const char[] address)
     return regex.Match(address) > 0;
 }
 
-stock bool WalletRegistered(const int steamId)
+void RegisterPlayer(const int steamId)
 {
-    Format(dbStatementError, sizeof(dbStatementError), "");
-    SQL_BindParamInt(statement_GetWalletRegistered, 0, steamId);
+    char url[256];
+    Format(url, sizeof(url), "%s/register", httpServerIp);
+    Handle requestHandle = SteamWorks_CreateHTTPRequest(k_EHTTPMethodPOST, url);
 
-    if (!SQL_Execute(statement_GetWalletRegistered))
+    if (requestHandle == INVALID_HANDLE)
     {
-        char error[128];
-        SQL_GetError(walletsDB, error, sizeof(error));
-        PrintToServer("[PTE] [WalletRegistered] Error checking if %d exists: %s", steamId, error);
-        return false;
+        PrintToServer("[PTE] Error while creating the http request.");
+        return;
     }
-    else {
-        while (SQL_FetchRow(statement_GetWalletRegistered))
-        {
-            char walletAddress[68];
-            if (!SQL_IsFieldNull(statement_GetWalletRegistered, 0))
-            {
-                SQL_FetchString(statement_GetWalletRegistered, 0, walletAddress, sizeof(walletAddress));
-            }
-            if (strlen(walletAddress) > 0)
-            {
-                return true;
-            }
-            else {
-                return false;
-            }
-        }
-        return false;
-    }
+
+    SteamWorks_SetHTTPCallbacks(requestHandle, OnRegisterPlayerRequest);
+
+    JSON_Object body = new JSON_Object();
+    body.SetInt("uniqueid", steamId);
+    char bodyStr[256];
+    body.Encode(bodyStr, sizeof(bodyStr));
+
+    SteamWorks_SetHTTPRequestHeaderValue(requestHandle, "Content-Type", "application/json");
+    SteamWorks_SetHTTPRequestHeaderValue(requestHandle, "from", httpFrom);
+    SteamWorks_SetHTTPRequestRawPostBody(requestHandle, "application/json", bodyStr, strlen(bodyStr));
+
+    SteamWorks_SendHTTPRequest(requestHandle);
 }
 
-bool PlayerRegistered(const int steamId)
+public OnRegisterPlayerRequest(Handle hRequest, bool bFailure, bool bRequestSuccessful, EHTTPStatusCode eStatusCode, any data1, any data2)
 {
-    Format(dbStatementError, sizeof(dbStatementError), "");
-    SQL_BindParamInt(statement_GetPlayerRegistered, 0, steamId);
-
-    if (!SQL_Execute(statement_GetPlayerRegistered))
-    {
-        char error[128];
-        SQL_GetError(walletsDB, error, sizeof(error));
-        PrintToServer("[PTE] [PlayerRegistered] Error checking if %d exists: %s", steamId, error);
-        return false;
-    }
-    else {
-        while (SQL_FetchRow(statement_GetPlayerRegistered))
-        {
-            int rows = SQL_FetchInt(statement_GetPlayerRegistered, 0);
-            if (rows == 0)
-            {
-                return false;
-            }
-            else if (rows > 1) {
-                PrintToServer("[PTE] ERROR: uniqueid \"%d\" is on multiples rows, your database is incorrectly configured, please check it. from: %d, rows: %d", steamId, rows);
-                return false;
-            }
-            else {
-                return true;
-            }
-        }
-        return false;
-    }
-}
-
-bool RegisterPlayer(const int steamId)
-{
-    Format(dbStatementError, sizeof(dbStatementError), "");
-    SQL_BindParamInt(statement_RegisterPlayer, 0, steamId);
-
-    if (!SQL_Execute(statement_RegisterPlayer))
-    {
-        char error[128];
-        SQL_GetError(walletsDB, error, sizeof(error));
-        PrintToServer("[PTE] Error checking if %d exists: %s", steamId, error);
-        return false;
-    }
-    else {
-        int affectedRows = SQL_GetAffectedRows(statement_RegisterPlayer);
-        if (affectedRows == 0)
-        {
-            PrintToServer("[PTE] ERROR: No rows affected when registering for player: %d", steamId);
-            return false;
-        }
-        else if (affectedRows > 1) {
-            PrintToServer("[PTE] ERROR: MULTIPLES ROWS AFFECTED WHILE INSERTING PLAYERS: %d, rows: %d", steamId, affectedRows);
-            return false;
-        }
-        else {
-            return true;
-        }
-    }
 }
 
 JSON_Object getPlayerByUserId(int userId)
@@ -953,6 +875,7 @@ void cleanupOnlinePlayers()
     for (int i = 0; i < MAXPLAYERS; i++)
     {
         strcopy(onlinePlayers[i], 256, "");
+        onlinePlayers[i][0] = EOS;
     }
     onlinePlayersCount = 0;
 }
