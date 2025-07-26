@@ -11,42 +11,228 @@ public Plugin myinfo =
     url         = "https://github.com/Play-To-Earn-Currency/team_fortress_2"
 };
 
-static int playersTimestamp[MAXPLAYERS];
+static int  playersTimestamp[MAXPLAYERS];
 
-int        currentTimestamp             = 0;
-int        timestampIncomes[15]         = { 60, 120, 180, 240, 300, 360, 420, 480, 540, 600, 660, 720, 780, 840, 900 };
-const int  timestampIncomesSize         = 15;
-char       timestampValue[15][20]       = { "100000000000000000", "150000000000000000", "200000000000000000",
-                                "250000000000000000", "300000000000000000", "350000000000000000",
-                                "400000000000000000", "450000000000000000", "500000000000000000",
-                                "550000000000000000", "600000000000000000", "650000000000000000",
-                                "700000000000000000", "750000000000000000", "800000000000000000" };
-char       timestampValueToShow[15][10] = { "0.1", "0.15", "0.2",
-                                      "0.25", "0.3", "0.35",
-                                      "0.4", "0.45", "0.5",
-                                      "0.55", "0.6", "0.65",
-                                      "0.7", "0.75", "0.8" };
+static int  currentTimestamp             = 0;
 
-char       winnerValue[20]              = "500000000000000000";
-char       loserValue[20]               = "300000000000000000";
-char       winnerToShow[10]             = "0.5";
-char       loserToShow[10]              = "0.3";
+static int  timestampIncomesSize         = 15;
+static int  timestampIncomes[15]         = { 60, 120, 180, 240, 300, 360, 420, 480, 540, 600, 660, 720, 780, 840, 900 };
+static char timestampValue[15][20]       = { "100000000000000000", "150000000000000000", "200000000000000000",
+                                       "250000000000000000", "300000000000000000", "350000000000000000",
+                                       "400000000000000000", "450000000000000000", "500000000000000000",
+                                       "550000000000000000", "600000000000000000", "650000000000000000",
+                                       "700000000000000000", "750000000000000000", "800000000000000000" };
+static char timestampValueToShow[15][10] = { "0.1", "0.15", "0.2",
+                                             "0.25", "0.3", "0.35",
+                                             "0.4", "0.45", "0.5",
+                                             "0.55", "0.6", "0.65",
+                                             "0.7", "0.75", "0.8" };
 
-const int  minimumTimePlayedForIncoming = 60;
-const int  minimumPlayerForSoloMVP      = 16;
-const int  minimumPlayerForTwoMVP       = 8;
-const int  minimumPlayerForThreeMVP     = 4;
+static char winnerValue[20]              = "500000000000000000";
+static char loserValue[20]               = "300000000000000000";
+static char winnerToShow[10]             = "0.5";
+static char loserToShow[10]              = "0.3";
 
-char       soloMVPValue[20]             = "50000000000000000";
-char       twoMVPValue[20]              = "30000000000000000";
-char       threeMVPValue[20]            = "10000000000000000";
-char       soloMVPValueShow[10]         = "0.5";
-char       twoMVPValueShow[10]          = "0.3";
-char       threeMVPValueShow[10]        = "0.1";
-const int  minimumScoreToReceiveMVP     = 5;
+static int  minimumTimePlayedForIncoming = 60;
+static int  minimumPlayerForSoloMVP      = 16;
+static int  minimumPlayerForTwoMVP       = 8;
+static int  minimumPlayerForThreeMVP     = 4;
+
+static char soloMVPValue[20]             = "500000000000000000";
+static char twoMVPValue[20]              = "300000000000000000";
+static char threeMVPValue[20]            = "100000000000000000";
+static char soloMVPValueShow[10]         = "0.5";
+static char twoMVPValueShow[10]          = "0.3";
+static char threeMVPValueShow[10]        = "0.1";
+static int  minimumScoreToReceiveMVP     = 5;
 
 public void OnPluginStart()
 {
+    // Configuration Load
+    {
+        char configPath[PLATFORM_MAX_PATH] = "addons/sourcemod/configs/play_to_earn.cfg";
+
+        if (!FileExists(configPath))
+        {
+            Handle file = OpenFile(configPath, "w");
+            if (file != null)
+            {
+                WriteFileLine(file, "\"PlayToEarn\"");
+                WriteFileLine(file, "{");
+
+                WriteFileLine(file, "    \"timestampIncomesSize\"       \"15\"");
+                WriteFileLine(file, "");
+
+                WriteFileLine(file, "    \"timestampIncomes\"");
+                WriteFileLine(file, "    {");
+                WriteFileLine(file, "        \"0\"  \"60\"");
+                WriteFileLine(file, "        \"1\"  \"120\"");
+                WriteFileLine(file, "        \"2\"  \"180\"");
+                WriteFileLine(file, "        \"3\"  \"240\"");
+                WriteFileLine(file, "        \"4\"  \"300\"");
+                WriteFileLine(file, "        \"5\"  \"360\"");
+                WriteFileLine(file, "        \"6\"  \"420\"");
+                WriteFileLine(file, "        \"7\"  \"480\"");
+                WriteFileLine(file, "        \"8\"  \"540\"");
+                WriteFileLine(file, "        \"9\"  \"600\"");
+                WriteFileLine(file, "        \"10\" \"660\"");
+                WriteFileLine(file, "        \"11\" \"720\"");
+                WriteFileLine(file, "        \"12\" \"780\"");
+                WriteFileLine(file, "        \"13\" \"840\"");
+                WriteFileLine(file, "        \"14\" \"900\"");
+                WriteFileLine(file, "    }");
+                WriteFileLine(file, "");
+
+                WriteFileLine(file, "    \"timestampValue\"");
+                WriteFileLine(file, "    {");
+                WriteFileLine(file, "        \"0\"  \"100000000000000000\"");
+                WriteFileLine(file, "        \"1\"  \"150000000000000000\"");
+                WriteFileLine(file, "        \"2\"  \"200000000000000000\"");
+                WriteFileLine(file, "        \"3\"  \"250000000000000000\"");
+                WriteFileLine(file, "        \"4\"  \"300000000000000000\"");
+                WriteFileLine(file, "        \"5\"  \"350000000000000000\"");
+                WriteFileLine(file, "        \"6\"  \"400000000000000000\"");
+                WriteFileLine(file, "        \"7\"  \"450000000000000000\"");
+                WriteFileLine(file, "        \"8\"  \"500000000000000000\"");
+                WriteFileLine(file, "        \"9\"  \"550000000000000000\"");
+                WriteFileLine(file, "        \"10\" \"600000000000000000\"");
+                WriteFileLine(file, "        \"11\" \"650000000000000000\"");
+                WriteFileLine(file, "        \"12\" \"700000000000000000\"");
+                WriteFileLine(file, "        \"13\" \"750000000000000000\"");
+                WriteFileLine(file, "        \"14\" \"800000000000000000\"");
+                WriteFileLine(file, "    }");
+                WriteFileLine(file, "");
+
+                WriteFileLine(file, "    \"timestampValueToShow\"");
+                WriteFileLine(file, "    {");
+                WriteFileLine(file, "        \"0\"  \"0.1\"");
+                WriteFileLine(file, "        \"1\"  \"0.15\"");
+                WriteFileLine(file, "        \"2\"  \"0.2\"");
+                WriteFileLine(file, "        \"3\"  \"0.25\"");
+                WriteFileLine(file, "        \"4\"  \"0.3\"");
+                WriteFileLine(file, "        \"5\"  \"0.35\"");
+                WriteFileLine(file, "        \"6\"  \"0.4\"");
+                WriteFileLine(file, "        \"7\"  \"0.45\"");
+                WriteFileLine(file, "        \"8\"  \"0.5\"");
+                WriteFileLine(file, "        \"9\"  \"0.55\"");
+                WriteFileLine(file, "        \"10\" \"0.6\"");
+                WriteFileLine(file, "        \"11\" \"0.65\"");
+                WriteFileLine(file, "        \"12\" \"0.7\"");
+                WriteFileLine(file, "        \"13\" \"0.75\"");
+                WriteFileLine(file, "        \"14\" \"0.8\"");
+                WriteFileLine(file, "    }");
+                WriteFileLine(file, "");
+
+                WriteFileLine(file, "    \"winnerValue\"       \"500000000000000000\"");
+                WriteFileLine(file, "");
+                WriteFileLine(file, "    \"loserValue\"       \"300000000000000000\"");
+                WriteFileLine(file, "");
+                WriteFileLine(file, "    \"winnerToShow\"       \"0.5\"");
+                WriteFileLine(file, "");
+                WriteFileLine(file, "    \"loserToShow\"       \"0.3\"");
+                WriteFileLine(file, "");
+
+                WriteFileLine(file, "    \"minimumTimePlayedForIncoming\"       \"60\"");
+                WriteFileLine(file, "");
+                WriteFileLine(file, "    \"minimumPlayerForSoloMVP\"       \"16\"");
+                WriteFileLine(file, "");
+                WriteFileLine(file, "    \"minimumPlayerForTwoMVP\"       \"8\"");
+                WriteFileLine(file, "");
+                WriteFileLine(file, "    \"minimumPlayerForThreeMVP\"       \"4\"");
+                WriteFileLine(file, "");
+
+                WriteFileLine(file, "    \"soloMVPValue\"       \"500000000000000000\"");
+                WriteFileLine(file, "");
+                WriteFileLine(file, "    \"twoMVPValue\"       \"300000000000000000\"");
+                WriteFileLine(file, "");
+                WriteFileLine(file, "    \"threeMVPValue\"       \"100000000000000000\"");
+                WriteFileLine(file, "");
+                WriteFileLine(file, "    \"soloMVPValueShow\"       \"0.5\"");
+                WriteFileLine(file, "");
+                WriteFileLine(file, "    \"twoMVPValueShow\"       \"0.3\"");
+                WriteFileLine(file, "");
+                WriteFileLine(file, "    \"threeMVPValueShow\"       \"0.1\"");
+                WriteFileLine(file, "");
+                WriteFileLine(file, "    \"minimumScoreToReceiveMVP\"       \"5\"");                
+
+                WriteFileLine(file, "}");
+                CloseHandle(file);
+                PrintToServer("[PTE] Configuration file created: %s", configPath);
+            }
+            else
+            {
+                PrintToServer("[PTE] Cannot create default file.");
+                return;
+            }
+        }
+
+        KeyValues kv = new KeyValues("PlayToEarn");
+        if (!kv.ImportFromFile(configPath))
+        {
+            delete kv;
+            PrintToServer("[PTE] Cannot load configuration file: %s", configPath);
+        }
+        // Loading from file
+        else {
+            timestampIncomesSize = kv.GetNum("timestampIncomesSize", 15);
+            if (kv.JumpToKey("timestampIncomes"))
+            {
+                for (int i = 0; i < timestampIncomesSize; i++)
+                {
+                    char key[8];
+                    Format(key, sizeof(key), "%d", i);
+                    timestampIncomes[i] = kv.GetNum(key, 0);
+                }
+                kv.GoBack();
+                PrintToServer("[PTE] timestampIncomes Loaded!");
+            }
+            if (kv.JumpToKey("timestampValue"))
+            {
+                for (int i = 0; i < timestampIncomesSize; i++)
+                {
+                    char key[8];
+                    Format(key, sizeof(key), "%d", i);
+                    char value[32];
+                    kv.GetString(key, value, sizeof(value), "100000000000000000");
+                    strcopy(timestampValue[i], sizeof(timestampValue[i]), value);
+                }
+                kv.GoBack();
+                PrintToServer("[PTE] timestampValue Loaded!");
+            }
+            if (kv.JumpToKey("timestampValueToShow"))
+            {
+                for (int i = 0; i < timestampIncomesSize; i++)
+                {
+                    char key[8];
+                    Format(key, sizeof(key), "%d", i);
+                    char value[32];
+                    kv.GetString(key, value, sizeof(value), "0.1");
+                    strcopy(timestampValueToShow[i], sizeof(timestampValueToShow[i]), value);
+                }
+                kv.GoBack();
+                PrintToServer("[PTE] timestampValueToShow Loaded!");
+            }
+
+            kv.GetString("winnerValue", winnerValue, sizeof(winnerValue), "500000000000000000");
+            kv.GetString("loserValue", loserValue, sizeof(loserValue), "300000000000000000");
+            kv.GetString("winnerToShow", winnerToShow, sizeof(winnerToShow), "0.5");
+            kv.GetString("loserToShow", loserToShow, sizeof(loserToShow), "0.3");
+
+            minimumTimePlayedForIncoming = kv.GetNum("minimumTimePlayedForIncoming", 60);
+            minimumPlayerForSoloMVP      = kv.GetNum("minimumPlayerForSoloMVP", 16);
+            minimumPlayerForTwoMVP       = kv.GetNum("minimumPlayerForTwoMVP", 8);
+            minimumPlayerForThreeMVP     = kv.GetNum("minimumPlayerForThreeMVP", 4);
+
+            kv.GetString("soloMVPValue", soloMVPValue, sizeof(soloMVPValue), "500000000000000000");
+            kv.GetString("twoMVPValue", twoMVPValue, sizeof(twoMVPValue), "300000000000000000");
+            kv.GetString("threeMVPValue", threeMVPValue, sizeof(threeMVPValue), "100000000000000000");
+            kv.GetString("soloMVPValueShow", soloMVPValueShow, sizeof(soloMVPValueShow), "0.5");
+            kv.GetString("twoMVPValueShow", twoMVPValueShow, sizeof(twoMVPValueShow), "0.3");
+            kv.GetString("threeMVPValueShow", threeMVPValueShow, sizeof(threeMVPValueShow), "0.1");
+            minimumScoreToReceiveMVP = kv.GetNum("minimumScoreToReceiveMVP", 5);
+        }
+    }
+
     CreateTimer(1.0, TimestampUpdate, _, TIMER_REPEAT);
 
     // Match Finish Event
